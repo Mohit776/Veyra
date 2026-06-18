@@ -1,16 +1,12 @@
-import os
 import json
 import re
 from groq import Groq
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from config import config
 
 # Initialize Groq client
-client = Groq(api_key=os.environ.get("GROQ_KEY"))
+client = Groq(api_key=config.GROQ_KEY)
 
-MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = config.GROQ_MODEL
 
 def run_interview_turn(
     interview_id: str,
@@ -27,7 +23,7 @@ def run_interview_turn(
     candidate_answers = [
         message for message in history if message.get("role") == "user"
     ]
-    should_wrap = len(candidate_answers) >= 6
+    should_wrap = len(candidate_answers) >= 4
 
     transcript = "\n".join(
         f"{message.get('role', 'unknown').upper()}: {message.get('content', '')}"
@@ -70,7 +66,7 @@ Rules:
 - Keep questions practical, role-specific, and tailored to the candidate's resume and the job description.
 - If the candidate already answered, briefly acknowledge the answer before the next question.
 - Ask follow-up questions and cross-questions to challenge the candidate's assumptions and evaluate their depth of knowledge.
-- The interview is capped at 7 questions. You will be told when to wrap up.
+- The interview is capped at 4 questions. You will be told when to wrap up.
 - Be professional, supportive, and direct.
 
 Return ONLY a valid JSON object with this exact shape:
@@ -103,12 +99,21 @@ Return ONLY a valid JSON object with this exact shape:
         if score is not None:
             score = max(1, min(100, int(score)))
 
+        finished = bool(result.get("finished", False))
+
+        # Force end the interview if the question limit has been reached,
+        # even if the LLM ignores the wrap-up instruction
+        if should_wrap:
+            finished = True
+            if score is None:
+                score = 50  # default score if LLM didn't provide one
+
         return {
             "reply": result.get("reply", ""),
-            "stage": result.get("stage", "question"),
+            "stage": "wrapup" if finished else result.get("stage", "question"),
             "feedback": result.get("feedback", ""),
             "score": score,
-            "finished": bool(result.get("finished", False)),
+            "finished": finished,
         }
     except Exception as e:
         fallback_reply = (

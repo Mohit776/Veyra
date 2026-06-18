@@ -45,8 +45,8 @@ export default function InterviewPage({ params }: PageProps) {
   const transcriptRef = useRef(transcript);
   const interimTranscriptRef = useRef(interimTranscript);
 
+  // Verify the interview link on mount
   useEffect(() => {
-    // Verify the link validity
     const verifyLink = async () => {
       try {
         const res = await fetch(`http://localhost:8000/api/interview/${id}/verify`);
@@ -61,10 +61,6 @@ export default function InterviewPage({ params }: PageProps) {
       }
     };
     verifyLink();
-
-    // Keep refs in sync so timers always read fresh values
-    transcriptRef.current = transcript;
-    interimTranscriptRef.current = interimTranscript;
 
     return () => {
       if (frameRef.current) {
@@ -83,6 +79,15 @@ export default function InterviewPage({ params }: PageProps) {
       }
     };
   }, [id]);
+
+  // Keep refs in sync so grace timer always reads fresh values (Issue #2 fix)
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+
+  useEffect(() => {
+    interimTranscriptRef.current = interimTranscript;
+  }, [interimTranscript]);
 
   const requestMicPermission = async () => {
     setMicState("requesting");
@@ -162,9 +167,21 @@ export default function InterviewPage({ params }: PageProps) {
         resolve();
         return;
       }
+
+      // Cancel any queued or ongoing speech first
+      window.speechSynthesis.cancel();
+
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+
+      // Timeout to prevent hanging if onend never fires (Issue #3 fix)
+      const timeout = setTimeout(() => {
+        window.speechSynthesis.cancel();
+        resolve();
+      }, 15000);
+
+      utterance.onend = () => { clearTimeout(timeout); resolve(); };
+      utterance.onerror = () => { clearTimeout(timeout); resolve(); };
+
       setAssistantSpeaking(true);
       window.speechSynthesis.speak(utterance);
     });
@@ -207,8 +224,11 @@ export default function InterviewPage({ params }: PageProps) {
   };
 
   const submitAnswer = async () => {
+    // Guard against duplicate submissions while LLM is responding (Issue #4 fix)
+    if (isFetching) return;
+
     // Capture both final and interim transcript before stopping
-    const fullTranscript = (transcript + interimTranscript).trim();
+    const fullTranscript = (transcriptRef.current + interimTranscriptRef.current).trim();
     stopDeepgramListening();
     clearGraceTimer();
 

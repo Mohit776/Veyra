@@ -3,10 +3,8 @@ import uuid
 import asyncio
 import json
 from urllib.parse import urlencode
-from dotenv import load_dotenv
 
-load_dotenv()
-
+from config import config
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -59,6 +57,11 @@ def verify_interview(interview_id: str):
         raise HTTPException(
             status_code=404, detail="Interview not found or invalid link.")
 
+    # Block if interview is already completed
+    if candidate.get("status") == "interview_completed":
+        raise HTTPException(
+            status_code=403, detail="This interview has already been completed.")
+
     # Check 24 hours validity
     created_at_str = candidate.get("created_at")
     if created_at_str:
@@ -84,6 +87,11 @@ def interview_message(interview_id: str, payload: InterviewTurnRequest):
     candidate = get_candidate_by_id(interview_id)
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    # Block if interview is already completed
+    if candidate.get("status") == "interview_completed":
+        raise HTTPException(
+            status_code=403, detail="This interview has already been completed.")
 
     # Check 24 hours validity
     created_at_str = candidate.get("created_at")
@@ -227,17 +235,21 @@ async def transcribe_ws(websocket: WebSocket, interview_id: str):
     """
     await websocket.accept()
 
-    api_key = os.getenv("DEEPGRAM_API_KEY")
+    api_key = config.DEEPGRAM_API_KEY
     if not api_key:
         await websocket.close(code=1011, reason="Deepgram API key not configured")
         return
 
     # Build Deepgram streaming URL with options
+    # Frontend sends audio/webm;codecs=opus via MediaRecorder
     params = {
-        "model": "nova-2",
+        "model": config.DEEPGRAM_MODEL,
         "smart_format": "true",
         "interim_results": "true",
         "endpointing": "300",
+        # "encoding": "opus",
+        # "container": "webm",
+        # "sample_rate": "48000",
     }
     dg_url = f"wss://api.deepgram.com/v1/listen?{urlencode(params)}"
     dg_headers = [("Authorization", f"Token {api_key}")]
