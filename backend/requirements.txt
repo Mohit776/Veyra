@@ -5,3 +5,4 @@ pdfplumber
 supabase
 python-dotenv
 groq
+deepgram-sdk

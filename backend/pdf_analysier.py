@@ -27,7 +27,8 @@ def save_candidate(
     job_id: str,
     score: int = 0,
     reason: str = "",
-    status: str = "scored"
+    status: str = "scored",
+    **kwargs
 ) -> dict:
     """Insert a candidate record into Supabase and return the saved row."""
     if not supabase:
@@ -43,6 +44,7 @@ def save_candidate(
         "score": score,
         "reason": reason,
         "status": status,
+        "job_description": kwargs.get("job_description", "")
     }
 
     result = supabase.table("candidates").insert(data).execute()
@@ -63,3 +65,15 @@ def get_top_candidates(job_id: str, limit: int = 20) -> list:
         .execute()
     )
     return result.data or []
+
+def get_candidate_by_id(candidate_id: str) -> dict:
+    if not supabase:
+        return {}
+    result = supabase.table("candidates").select("*").eq("id", candidate_id).execute()
+    return result.data[0] if result.data else {}
+
+def update_candidate_interview_score(candidate_id: str, interview_score: int) -> dict:
+    if not supabase:
+        return {}
+    result = supabase.table("candidates").update({"interview_score": interview_score, "status": "interview_completed"}).eq("id", candidate_id).execute()
+    return result.data[0] if result.data else {}

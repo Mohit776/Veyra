@@ -41,21 +41,24 @@ export async function POST(req: Request) {
       );
     }
 
-    const emailPromises = withEmail.map((candidate: any) =>
-      transporter.sendMail({
+    const emailPromises = withEmail.map((candidate: any) => {
+      const interviewUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/interview/${candidate.candidate_id}`;
+      return transporter.sendMail({
         from: userEmail,
         to: candidate.email,
         subject: `Congratulations! You have been shortlisted`,
         html: `
           <p>Dear Candidate,</p>
           <p>We are pleased to inform you that your profile (<strong>${candidate.filename}</strong>) has been shortlisted for the next round of interviews based on your resume score of <strong>${candidate.score}/10</strong>.</p>
-          <p>Our HR team will reach out to you shortly with further details.</p>
+          <p>Please click the link below to start your automated interview. This link is valid for 24 hours.</p>
+          <p><a href="${interviewUrl}" style="padding: 10px 20px; background-color: #2f6654; color: white; text-decoration: none; border-radius: 5px;">Start Interview</a></p>
+          <p>Or copy and paste this URL into your browser: <br/> ${interviewUrl}</p>
           <br/>
           <p>Best Regards,</p>
           <p>The Hiring Team</p>
         `,
-      })
-    );
+      });
+    });
 
     await Promise.all(emailPromises);
 
